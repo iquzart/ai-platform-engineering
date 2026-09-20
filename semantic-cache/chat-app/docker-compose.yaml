@@ -1,0 +1,108 @@
+services:
+  redis:
+    # Redis Stack includes Redis Insight on port 8001; the server-only image does not.
+    image: redis/redis-stack:7.4.0-v8
+    env_file:
+      - .env
+    environment:
+      # Redis Stack passes REDIS_ARGS to redis-server while retaining its modules,
+      # including Redis Insight on port 8001.
+      REDIS_ARGS: --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env before starting Compose}
+    ports:
+      - "6379:6379"
+      - "8001:8001"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'redis-cli --no-auth-warning -a "$$REDIS_PASSWORD" ping | grep -qx PONG',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - chat-app-network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.80.11-stable
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    env_file:
+      - .env
+    environment:
+      # Docker Desktop for macOS resolves host.docker.internal to the host's Ollama server.
+      # Override OLLAMA_API_BASE in .env for a remote or differently exposed Ollama server.
+      OLLAMA_API_BASE: ${OLLAMA_API_BASE:?Set OLLAMA_API_BASE in .env before starting Compose}
+      # Credential presented by the application to this gateway.
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY in .env before starting Compose}
+      # Proxy UI credentials. Keep them separate from the API master key.
+      UI_USERNAME: ${LITELLM_UI_USERNAME:?Set LITELLM_UI_USERNAME in .env before starting Compose}
+      UI_PASSWORD: ${LITELLM_UI_PASSWORD:?Set LITELLM_UI_PASSWORD in .env before starting Compose}
+    volumes:
+      - ./litellm-config.yaml:/app/config.yaml:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+    networks:
+      - chat-app-network
+    ports:
+      # Loopback-only: exposes the LiteLLM dashboard without publishing it to the LAN.
+      - "127.0.0.1:4000:4000"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+  chat-app:
+    build:
+      context: .
+      dockerfile: Containerfile
+    environment:
+      PORT: 8080
+      SERVICE_NAME: chat-app
+      LOG_LEVEL: info
+      TRACING_ENABLED: "false"
+      REDIS_ADDR: redis:6379
+      # The application receives the credential from the local, gitignored .env.
+      # Redis client password support must consume this variable in application code.
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env before starting Compose}
+      # Keep the application on the OpenAI API contract; LiteLLM proxies it.
+      OPENAI_BASE_URL: http://litellm:4000/v1
+      OPENAI_API_KEY: ${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY in .env before starting Compose}
+      EMBEDDING_MODEL: nomic-embed-text
+      LLM_MODEL: llama3.1:8b
+      SEMANTIC_CACHE_ENABLED: "true"
+      SEMANTIC_CACHE_THRESHOLD: "0.92"
+      SEMANTIC_CACHE_TTL: 3600s
+      PROMPT_VERSION: v1
+    depends_on:
+      redis:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    networks:
+      - chat-app-network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+
+networks:
+  chat-app-network:
+    name: chat-app-network
