@@ -1,0 +1,37 @@
+openapi: 3.0.3
+info:
+  title: Semantic Cache Chat API
+  version: 1.0.0
+paths:
+  /chat:
+    post:
+      summary: Generate an answer, using a semantically similar cached answer when valid.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ChatRequest'}
+      responses:
+        '200':
+          description: Answer generated or retrieved from cache.
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChatResponse'}}}
+        '400': {description: Invalid request}
+        '502': {description: Configured OpenAI endpoint unavailable or failed}
+  /api/v1/ping: {get: {summary: Ping service, responses: {'200': {description: OK}}}}
+  /system/version: {get: {summary: Service version, responses: {'200': {description: OK}}}}
+  /system/health/live: {get: {summary: Liveness check, responses: {'200': {description: OK}}}}
+  /system/health/ready: {get: {summary: Readiness check, responses: {'200': {description: OK}}}}
+  /system/metrics: {get: {summary: Prometheus metrics, responses: {'200': {description: Metrics}}}}
+components:
+  schemas:
+    ChatRequest:
+      type: object
+      required: [query]
+      properties: {query: {type: string, example: How do I restart a Kubernetes pod?}}
+    ChatResponse:
+      type: object
+      required: [answer, cache_hit, similarity]
+      properties:
+        answer: {type: string}
+        cache_hit: {type: boolean}
+        similarity: {type: number, format: double}
