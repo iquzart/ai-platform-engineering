@@ -1,7 +1,7 @@
 
 <div align="center">
 
-# AI Platform
+# AI Platform Engineering
 
 **Open-source learning, experimentation, and engineering for building AI platforms.**
 
@@ -23,7 +23,7 @@ The goal is not to build a single AI application. The goal is to understand and 
 ## Areas
 
 ```text
-ai-platform/
+ai-platform-engineering/
 │
 ├── agents/              # Agents, tools, MCP, memory and runtimes
 ├── ai-gateway/          # Model routing, access, rate limits and cost controls
